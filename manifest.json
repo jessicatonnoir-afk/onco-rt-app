@@ -1,0 +1,354 @@
+/* ============================================================
+   Onco-RT — Lógica de la aplicación
+   Router por hash + renderizado de pantallas. Sin frameworks,
+   para que sea fácil de mantener y ampliar por el propio servicio.
+   ============================================================ */
+
+(function () {
+  "use strict";
+
+  const appEl = document.getElementById("app");
+  const screenHome = document.getElementById("screen-home");
+  const screenModule = document.getElementById("screen-module");
+  const screenLesson = document.getElementById("screen-lesson");
+  const screenSearch = document.getElementById("screen-search");
+  const header = document.getElementById("app-header");
+  const headerTitle = document.getElementById("header-title");
+  const backBtn = document.getElementById("back-btn");
+  const navBtns = document.querySelectorAll(".nav-btn");
+
+  const ICONS = {
+    iso: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>`,
+    doc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h6M9.5 16h6"/></svg>`,
+    pill: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="9.5" width="17.6" height="7" rx="3.5" transform="rotate(-35 12 13)"/><path d="M10 10.2 14 16" /></svg>`,
+    syringe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4l-3 3"/><path d="M17.5 6.5l-10 10-3.5 4 4-3.5 10-10z"/><path d="M14 7l3 3"/><path d="M11.5 9.5l3 3"/><path d="M3 21l2.5-2.5"/></svg>`,
+    home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>`,
+    grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/></svg>`,
+    search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="M20 20l-4.3-4.3"/></svg>`,
+    chev: `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
+    back: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>`,
+    info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="M12 11v5.2"/><circle cx="12" cy="8.3" r="0.15" fill="currentColor" stroke="currentColor" stroke-width="1.6"/></svg>`,
+    empty: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="M20 20l-4.3-4.3"/></svg>`
+  };
+
+  function findModule(id) { return MODULES.find((m) => m.id === id); }
+  function findLesson(modId, lesId) {
+    const mod = findModule(modId);
+    if (!mod) return null;
+    return mod.lessons.find((l) => l.id === lesId) || null;
+  }
+
+  /* ---------------- Render: Home ---------------- */
+
+  function renderHome() {
+    const grid = MODULES.map((mod) => moduleCardHtml(mod)).join("");
+    screenHome.innerHTML = `
+      <div class="hero">
+        <p class="eyebrow">Onco-RT · Enfermería</p>
+        <h2>Formación y consulta para radioterapia oncológica</h2>
+        <p>Protocolos, sistemas, farmacología, braquiterapia y mucho más, siempre a mano.</p>
+      </div>
+      <button class="search-box" id="home-search-trigger" type="button">
+        ${ICONS.search}
+        <span style="color:var(--ink-faint); font-size:14.5px;">Buscar en todos los módulos…</span>
+      </button>
+      <p class="section-label">Módulos</p>
+      <div class="module-grid">${grid}</div>
+    `;
+    document.getElementById("home-search-trigger").addEventListener("click", () => {
+      location.hash = "#/search";
+    });
+    screenHome.querySelectorAll("[data-go-module]").forEach((card) => {
+      card.addEventListener("click", () => {
+        const id = card.getAttribute("data-go-module");
+        const mod = findModule(id);
+        if (mod.status === "soon") return;
+        location.hash = "#/module/" + id;
+      });
+    });
+  }
+
+  function moduleCardHtml(mod) {
+    const disabled = mod.status === "soon";
+    return `
+      <button class="module-card${disabled ? " is-disabled" : ""}" data-go-module="${mod.id}" type="button">
+        <span class="module-icon" style="background:${mod.tint}; color:${mod.color};">${ICONS[mod.icon]}</span>
+        <span class="module-body">
+          <h3>${mod.title}</h3>
+          <p>${mod.short}</p>
+          <span class="module-meta">${disabled ? '<span class="badge-soon">Próximamente</span>' : `${mod.lessons.length} lecciones`}</span>
+        </span>
+        ${disabled ? "" : ICONS.chev}
+      </button>
+    `;
+  }
+
+  /* ---------------- Render: Módulo ---------------- */
+
+  function renderModule(modId) {
+    const mod = findModule(modId);
+    if (!mod) { location.hash = "#/home"; return; }
+
+    if (mod.lessons.length === 0) {
+      screenModule.innerHTML = `
+        <div class="module-hero" style="background:linear-gradient(135deg, ${mod.color}, ${mod.color}cc);">
+          <h2>${mod.title}</h2>
+          <p>${mod.short}</p>
+        </div>
+        <div class="empty-state">
+          ${ICONS.empty}
+          <p>Este módulo está en preparación.<br>Pronto encontrarás aquí su contenido.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const rows = mod.lessons.map((les, i) => `
+      <li>
+        <button class="lesson-row" data-go-lesson="${les.id}" type="button">
+          <span class="lesson-num">${String(i + 1).padStart(2, "0")}</span>
+          <span style="flex:1; min-width:0;">
+            <h4>${les.title}</h4>
+            <p class="lesson-sub">${les.sub}</p>
+          </span>
+          ${ICONS.chev}
+        </button>
+      </li>
+    `).join("");
+
+    screenModule.innerHTML = `
+      <div class="module-hero" style="background:linear-gradient(135deg, ${mod.color}, ${mod.color}cc);">
+        <h2>${mod.title}</h2>
+        <p>${mod.short}</p>
+      </div>
+      <p class="section-label">Lecciones</p>
+      <ul class="lesson-list">${rows}</ul>
+    `;
+
+    screenModule.querySelectorAll("[data-go-lesson]").forEach((row) => {
+      row.addEventListener("click", () => {
+        location.hash = `#/lesson/${modId}/${row.getAttribute("data-go-lesson")}`;
+      });
+    });
+  }
+
+  /* ---------------- Render: Lección ---------------- */
+
+  function renderLesson(modId, lesId) {
+    const mod = findModule(modId);
+    const lesson = findLesson(modId, lesId);
+    if (!mod || !lesson) { location.hash = "#/home"; return; }
+
+    const idx = mod.lessons.findIndex((l) => l.id === lesId);
+    const prev = mod.lessons[idx - 1];
+    const next = mod.lessons[idx + 1];
+
+    screenLesson.innerHTML = `
+      ${mod.id === "m1" ? `
+      <div class="draft-banner">
+        ${ICONS.info}
+        <span><strong>Borrador inicial.</strong> Contenido pendiente de validación clínica por el servicio. No usar como protocolo oficial hasta su revisión y aprobación.</span>
+      </div>` : ""}
+      <p class="lesson-eyebrow" style="color:${mod.color};">${mod.title}</p>
+      <h2 class="lesson-title">${lesson.title}</h2>
+      <div class="lesson-content">${lesson.html}</div>
+      <div class="lesson-nav">
+        <button class="lesson-nav-btn prev" ${!prev ? "hidden disabled" : ""} data-nav="${prev ? prev.id : ""}" type="button">
+          <span class="dir">← Anterior</span>
+          <span class="ttl">${prev ? prev.title : ""}</span>
+        </button>
+        <button class="lesson-nav-btn next" ${!next ? "hidden disabled" : ""} data-nav="${next ? next.id : ""}" type="button">
+          <span class="dir">Siguiente →</span>
+          <span class="ttl">${next ? next.title : ""}</span>
+        </button>
+      </div>
+    `;
+
+    screenLesson.querySelectorAll("[data-nav]").forEach((btn) => {
+      const target = btn.getAttribute("data-nav");
+      if (!target) return;
+      btn.addEventListener("click", () => {
+        location.hash = `#/lesson/${modId}/${target}`;
+      });
+    });
+  }
+
+  /* ---------------- Render: Búsqueda ---------------- */
+
+  function stripHtml(html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return tmp.textContent || "";
+  }
+
+  function buildSearchIndex() {
+    const index = [];
+    MODULES.forEach((mod) => {
+      mod.lessons.forEach((les) => {
+        index.push({
+          modId: mod.id,
+          modTitle: mod.title,
+          modColor: mod.color,
+          lesId: les.id,
+          title: les.title,
+          text: stripHtml(les.html)
+        });
+      });
+    });
+    return index;
+  }
+  const SEARCH_INDEX = buildSearchIndex();
+
+  function highlight(text, q) {
+    if (!q) return text;
+    const re = new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+    return text.replace(re, "<mark>$1</mark>");
+  }
+
+  function renderSearch(query) {
+    screenSearch.innerHTML = `
+      <div class="search-box" style="margin-bottom:18px;">
+        ${ICONS.search}
+        <input id="search-input" type="text" placeholder="Buscar lecciones, términos, conceptos…" autocomplete="off" />
+      </div>
+      <div id="search-results"></div>
+    `;
+    const input = document.getElementById("search-input");
+    const resultsEl = document.getElementById("search-results");
+
+    function doSearch(q) {
+      const query = q.trim().toLowerCase();
+      if (!query) {
+        resultsEl.innerHTML = `
+          <div class="empty-state">
+            ${ICONS.empty}
+            <p>Escribe para buscar en todas las lecciones disponibles.</p>
+          </div>`;
+        return;
+      }
+      const matches = SEARCH_INDEX.filter((item) =>
+        item.title.toLowerCase().includes(query) || item.text.toLowerCase().includes(query)
+      ).slice(0, 25);
+
+      if (matches.length === 0) {
+        resultsEl.innerHTML = `
+          <div class="empty-state">
+            ${ICONS.empty}
+            <p>Sin resultados para "${q}".</p>
+          </div>`;
+        return;
+      }
+
+      resultsEl.innerHTML = matches.map((m) => {
+        const lower = m.text.toLowerCase();
+        const pos = lower.indexOf(query);
+        let snippet = m.text.slice(0, 110);
+        if (pos > 40) snippet = "…" + m.text.slice(pos - 35, pos + 80) + "…";
+        return `
+          <button class="search-result" data-go="${m.modId}|${m.lesId}" type="button">
+            <p class="res-mod" style="color:${m.modColor};">${m.modTitle}</p>
+            <h4>${highlight(m.title, q)}</h4>
+            <p>${highlight(snippet, q)}</p>
+          </button>
+        `;
+      }).join("");
+
+      resultsEl.querySelectorAll("[data-go]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const [mId, lId] = btn.getAttribute("data-go").split("|");
+          location.hash = `#/lesson/${mId}/${lId}`;
+        });
+      });
+    }
+
+    input.addEventListener("input", () => doSearch(input.value));
+    if (query) { input.value = query; }
+    doSearch(input.value);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  /* ---------------- Router ---------------- */
+
+  function setActiveScreen(name) {
+    [screenHome, screenModule, screenLesson, screenSearch].forEach((s) => s.hidden = true);
+    ({ home: screenHome, module: screenModule, lesson: screenLesson, search: screenSearch })[name].hidden = false;
+  }
+
+  function setActiveNav(name) {
+    navBtns.forEach((b) => b.classList.toggle("is-active", b.getAttribute("data-nav-target") === name));
+  }
+
+  function route() {
+    const hash = location.hash || "#/home";
+    const parts = hash.replace(/^#\//, "").split("/").filter(Boolean);
+    const view = parts[0] || "home";
+
+    appEl.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+
+    if (view === "home") {
+      renderHome();
+      setActiveScreen("home");
+      setActiveNav("home");
+      headerTitle.textContent = "Onco-RT";
+      backBtn.hidden = true;
+    } else if (view === "module" && parts[1]) {
+      renderModule(parts[1]);
+      setActiveScreen("module");
+      setActiveNav("home");
+      const mod = findModule(parts[1]);
+      headerTitle.textContent = mod ? mod.title : "Módulo";
+      backBtn.hidden = false;
+      backBtn.setAttribute("data-back-to", "#/home");
+    } else if (view === "lesson" && parts[1] && parts[2]) {
+      renderLesson(parts[1], parts[2]);
+      setActiveScreen("lesson");
+      setActiveNav("home");
+      const lesson = findLesson(parts[1], parts[2]);
+      headerTitle.textContent = lesson ? lesson.title : "Lección";
+      backBtn.hidden = false;
+      backBtn.setAttribute("data-back-to", "#/module/" + parts[1]);
+    } else if (view === "search") {
+      renderSearch(parts[1] ? decodeURIComponent(parts[1]) : "");
+      setActiveScreen("search");
+      setActiveNav("search");
+      headerTitle.textContent = "Buscar";
+      backBtn.hidden = true;
+    } else {
+      location.hash = "#/home";
+    }
+  }
+
+  backBtn.addEventListener("click", () => {
+    location.hash = backBtn.getAttribute("data-back-to") || "#/home";
+  });
+
+  navBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.getAttribute("data-nav-target");
+      location.hash = target === "modules" ? "#/home" : "#/" + target;
+      if (target === "modules") {
+        setTimeout(() => {
+          document.querySelector(".module-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 60);
+      }
+    });
+  });
+
+  window.addEventListener("hashchange", route);
+  window.addEventListener("scroll", () => {
+    header.classList.toggle("is-scrolled", window.scrollY > 4);
+  });
+
+  route();
+
+  /* ---------------- Service worker ---------------- */
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js").catch(() => {
+        /* En entornos sin HTTPS (p. ej. file://) el registro fallará; no es crítico para el uso en línea. */
+      });
+    });
+  }
+})();
